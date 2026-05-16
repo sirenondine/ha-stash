@@ -8,5 +8,5 @@
   "integration_type": "service",
   "iot_class": "local_polling",
   "requirements": ["gql[requests]>=3.4.0"],
-  "version": "1.6.3"
+  "version": "1.6.4"
 }

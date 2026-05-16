@@ -101,7 +101,7 @@ class StashStatsCoordinator(_StashCoordinatorBase):
                 }
                 lastOScene: findScenes(
                     filter: { per_page: 1, sort: "o_counter", direction: DESC }
-                    scene_filter: { o_counter: { value: 1, modifier: GREATER_THAN } }
+                    scene_filter: { o_counter: { value: 0, modifier: GREATER_THAN } }
                 ) {
                     scenes {
                         id
@@ -113,7 +113,7 @@ class StashStatsCoordinator(_StashCoordinatorBase):
                 }
                 lastWatchedScene: findScenes(
                     filter: { per_page: 1, sort: "last_played_at", direction: DESC }
-                    scene_filter: { play_count: { value: 1, modifier: GREATER_THAN } }
+                    scene_filter: { play_count: { value: 0, modifier: GREATER_THAN } }
                 ) {
                     scenes {
                         id
