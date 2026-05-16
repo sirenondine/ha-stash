@@ -66,6 +66,11 @@ async def async_setup_entry(
             # --- Status sensors (fast coordinator) ---
             StashVersionSensor(status, entry),
             StashActiveJobSensor(status, entry),
+            # --- Scene sensors (slow coordinator) ---
+            StashLastOSceneSensor(stats, entry),
+            StashLastWatchedSceneSensor(stats, entry),
+            # --- Performer sensors (slow coordinator) ---
+            StashTopPerformerSensor(stats, entry),
         ]
     )
 
@@ -227,3 +232,111 @@ class StashActiveJobSensor(CoordinatorEntity[StashStatusCoordinator], SensorEnti
                 "job_id": job.get("id"),
             }
         return None
+
+
+class StashLastOSceneSensor(CoordinatorEntity[StashStatsCoordinator], SensorEntity):
+    """Sensor showing the title of the most recently O'd scene."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Last O Scene"
+    _attr_icon = "mdi:movie-star"
+
+    def __init__(self, coordinator: StashStatsCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_last_o_scene"
+        self._attr_device_info = _device_info(entry)
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the title of the most recently O'd scene."""
+        if self.coordinator.data is None:
+            return None
+        return self.coordinator.data.get("last_o_scene_title")
+
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        """Return scene details as attributes."""
+        if self.coordinator.data is None:
+            return None
+        title = self.coordinator.data.get("last_o_scene_title")
+        if title is None:
+            return None
+        return {
+            "date": self.coordinator.data.get("last_o_scene_date"),
+            "o_count": self.coordinator.data.get("last_o_scene_o_count"),
+            "last_o_at": self.coordinator.data.get("last_o_scene_last_o_at"),
+        }
+
+
+class StashLastWatchedSceneSensor(
+    CoordinatorEntity[StashStatsCoordinator], SensorEntity
+):
+    """Sensor showing the title of the most recently watched scene."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Last Watched Scene"
+    _attr_icon = "mdi:television-play"
+
+    def __init__(self, coordinator: StashStatsCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_last_watched_scene"
+        self._attr_device_info = _device_info(entry)
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the title of the most recently watched scene."""
+        if self.coordinator.data is None:
+            return None
+        return self.coordinator.data.get("last_watched_scene_title")
+
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        """Return scene details as attributes."""
+        if self.coordinator.data is None:
+            return None
+        title = self.coordinator.data.get("last_watched_scene_title")
+        if title is None:
+            return None
+        return {
+            "date": self.coordinator.data.get("last_watched_scene_date"),
+            "play_count": self.coordinator.data.get("last_watched_scene_play_count"),
+            "last_played_at": self.coordinator.data.get(
+                "last_watched_scene_last_played_at"
+            ),
+        }
+
+
+class StashTopPerformerSensor(CoordinatorEntity[StashStatsCoordinator], SensorEntity):
+    """Sensor showing the top performer by scene count."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Top Performer"
+    _attr_icon = "mdi:account-star"
+
+    def __init__(self, coordinator: StashStatsCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_top_performer"
+        self._attr_device_info = _device_info(entry)
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the name of the #1 performer by scene count."""
+        if self.coordinator.data is None:
+            return None
+        performers = self.coordinator.data.get("top_performers", [])
+        if not performers:
+            return None
+        return performers[0].get("name")
+
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        """Return the full top 5 performer list as attributes."""
+        if self.coordinator.data is None:
+            return None
+        performers = self.coordinator.data.get("top_performers", [])
+        if not performers:
+            return None
+        return {"top_performers": performers}

@@ -80,7 +80,7 @@ class StashStatsCoordinator(_StashCoordinatorBase):
         super().__init__(hass, config_entry, "Stash Stats", interval)
 
     async def _async_update_data(self) -> dict:
-        """Fetch library stats. Returns the flat stats dict."""
+        """Fetch library stats and last O'd scene. Returns a flat dict."""
         query = """
             query {
                 stats {
@@ -99,10 +99,88 @@ class StashStatsCoordinator(_StashCoordinatorBase):
                     total_play_count
                     scenes_played
                 }
+                lastOScene: findScenes(
+                    filter: { per_page: 1, sort: "last_o_at", direction: DESC }
+                    scene_filter: { o_counter: { value: 1, modifier: GREATER_THAN } }
+                ) {
+                    scenes {
+                        id
+                        title
+                        date
+                        o_counter
+                        last_o_at
+                    }
+                }
+                lastWatchedScene: findScenes(
+                    filter: { per_page: 1, sort: "last_played_at", direction: DESC }
+                    scene_filter: { play_count: { value: 1, modifier: GREATER_THAN } }
+                ) {
+                    scenes {
+                        id
+                        title
+                        date
+                        play_count
+                        last_played_at
+                    }
+                }
+                topPerformers: findPerformers(
+                    filter: { per_page: 5, sort: "scene_count", direction: DESC }
+                ) {
+                    performers {
+                        id
+                        name
+                        scene_count
+                        favorite
+                        rating100
+                    }
+                }
             }
         """
         data = await self._post(query)
-        return data.get("stats", {})
+        result = dict(data.get("stats", {}))
+
+        # Merge last O'd scene data into the flat result dict
+        o_scenes = (data.get("lastOScene") or {}).get("scenes", [])
+        if o_scenes:
+            scene = o_scenes[0]
+            result["last_o_scene_title"] = scene.get("title")
+            result["last_o_scene_date"] = scene.get("date")
+            result["last_o_scene_o_count"] = scene.get("o_counter")
+            result["last_o_scene_last_o_at"] = scene.get("last_o_at")
+        else:
+            result["last_o_scene_title"] = None
+            result["last_o_scene_date"] = None
+            result["last_o_scene_o_count"] = None
+            result["last_o_scene_last_o_at"] = None
+
+        # Merge last watched scene data into the flat result dict
+        watched_scenes = (data.get("lastWatchedScene") or {}).get("scenes", [])
+        if watched_scenes:
+            scene = watched_scenes[0]
+            result["last_watched_scene_title"] = scene.get("title")
+            result["last_watched_scene_date"] = scene.get("date")
+            result["last_watched_scene_play_count"] = scene.get("play_count")
+            result["last_watched_scene_last_played_at"] = scene.get("last_played_at")
+        else:
+            result["last_watched_scene_title"] = None
+            result["last_watched_scene_date"] = None
+            result["last_watched_scene_play_count"] = None
+            result["last_watched_scene_last_played_at"] = None
+
+        # Merge top performers into the flat result dict
+        performers = (data.get("topPerformers") or {}).get("performers", [])
+        result["top_performers"] = [
+            {
+                "rank": i + 1,
+                "name": p.get("name"),
+                "scene_count": p.get("scene_count"),
+                "favorite": p.get("favorite"),
+                "rating": p.get("rating100"),
+            }
+            for i, p in enumerate(performers)
+        ]
+
+        return result
 
 
 class StashStatusCoordinator(_StashCoordinatorBase):
