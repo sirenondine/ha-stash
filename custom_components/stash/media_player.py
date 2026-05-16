@@ -43,7 +43,9 @@ class StashMediaPlayer(CoordinatorEntity[StashStatsCoordinator], MediaPlayerEnti
     _attr_name = "Library"
     _attr_icon = "mdi:filmstrip-box-multiple"
     _attr_supported_features = (
-        MediaPlayerEntityFeature.BROWSE_MEDIA | MediaPlayerEntityFeature.PLAY_MEDIA
+        MediaPlayerEntityFeature.BROWSE_MEDIA
+        | MediaPlayerEntityFeature.PLAY_MEDIA
+        | MediaPlayerEntityFeature.STOP
     )
     _attr_media_content_type = MediaType.VIDEO
 
@@ -63,15 +65,51 @@ class StashMediaPlayer(CoordinatorEntity[StashStatsCoordinator], MediaPlayerEnti
         )
         self._url = entry.data[CONF_URL]
         self._api_key = entry.data[CONF_API_KEY]
+        # Currently displayed image/gallery (None = idle)
+        self._current_media: dict | None = None
 
     # ------------------------------------------------------------------
-    # State — this entity is a browser only, not a real player
+    # State — idle normally, playing when showing an image/gallery
     # ------------------------------------------------------------------
 
     @property
     def state(self) -> MediaPlayerState:
-        """Always idle — this entity browses, it does not play."""
-        return MediaPlayerState.IDLE
+        return (
+            MediaPlayerState.PLAYING if self._current_media else MediaPlayerState.IDLE
+        )
+
+    @property
+    def media_title(self) -> str | None:
+        return self._current_media.get("title") if self._current_media else None
+
+    @property
+    def media_content_type(self) -> str:
+        if self._current_media:
+            return MediaType.IMAGE
+        return MediaType.VIDEO
+
+    @property
+    def media_image_url(self) -> str | None:
+        """Return a direct Stash URL for the current image (local network)."""
+        if not self._current_media:
+            return None
+        kind = self._current_media.get("kind")
+        item_id = self._current_media.get("id")
+        if kind == "image":
+            return f"{self._url}/image/{item_id}/image?apikey={self._api_key}"
+        if kind == "gallery":
+            return f"{self._url}/gallery/{item_id}/cover?apikey={self._api_key}"
+        return None
+
+    @property
+    def media_image_remotely_accessible(self) -> bool:
+        """Image URL points to local Stash — not reachable from outside the LAN."""
+        return False
+
+    async def async_media_stop(self) -> None:
+        """Clear the currently displayed image and return to idle."""
+        self._current_media = None
+        self.async_write_ha_state()
 
     # ------------------------------------------------------------------
     # Play media — fires a HA event so automations can open Stash
@@ -83,22 +121,42 @@ class StashMediaPlayer(CoordinatorEntity[StashStatsCoordinator], MediaPlayerEnti
         media_id: str,
         **kwargs,
     ) -> None:
-        """Fire a stash_open event containing the Stash web UI URL."""
+        """Display images/galleries inline; open everything else in Stash."""
         parts = media_id.split("/")
         section = parts[0]
         item_id = parts[1] if len(parts) > 1 else None
 
-        # Map browser section → (Stash URL path, human type label)
+        if not item_id:
+            _LOGGER.warning("Cannot handle media_id: %s", media_id)
+            return
+
+        # --- Images and galleries: show inline in the media player card ---
+        if section in ("images", "galleries"):
+            # Fetch the title so the media card shows something meaningful
+            kind = section.rstrip("s")  # "image" or "gallery"
+            try:
+                data = await self.coordinator.async_query(
+                    f'query {{ find{kind.title()}(id: "{item_id}") {{ title }} }}'
+                )
+                title = (data.get(f"find{kind.title()}") or {}).get(
+                    "title"
+                ) or f"{kind.title()} {item_id}"
+            except Exception:  # pylint: disable=broad-except
+                title = f"{kind.title()} {item_id}"
+
+            self._current_media = {"kind": kind, "id": item_id, "title": title}
+            self.async_write_ha_state()
+            return
+
+        # --- Everything else: open in Stash ---
         section_map = {
             "scenes": ("scenes", "scene"),
             "performers": ("performers", "performer"),
             "studios": ("studios", "studio"),
             "tags": ("tags", "tag"),
-            "galleries": ("galleries", "gallery"),
-            "images": ("images", "image"),
         }
 
-        if section not in section_map or not item_id:
+        if section not in section_map:
             _LOGGER.warning("Cannot open Stash URL for media_id: %s", media_id)
             return
 
@@ -107,25 +165,36 @@ class StashMediaPlayer(CoordinatorEntity[StashStatsCoordinator], MediaPlayerEnti
 
         self.hass.bus.async_fire(
             "stash_open",
-            {
-                "url": stash_url,
-                "type": type_label,
-                "id": item_id,
-            },
+            {"url": stash_url, "type": type_label, "id": item_id},
         )
         _LOGGER.debug("Fired stash_open event: %s", stash_url)
 
-        # Show a clickable notification so the URL opens without needing an automation.
-        # Uses notification_id "stash_open" so each click replaces the previous one.
-        await self.hass.services.async_call(
-            "persistent_notification",
-            "create",
-            {
-                "title": "Open in Stash",
-                "message": f"[Open {type_label}]({stash_url})",
-                "notification_id": "stash_open",
-            },
-        )
+        # If browser_mod is installed, show the page in a popup directly.
+        # Otherwise fall back to a persistent notification with a clickable link.
+        if self.hass.services.has_service("browser_mod", "popup"):
+            await self.hass.services.async_call(
+                "browser_mod",
+                "popup",
+                {
+                    "title": f"Stash — {type_label.title()}",
+                    "content": {"type": "webpage", "url": stash_url},
+                    "size": "wide",
+                },
+            )
+        else:
+            await self.hass.services.async_call(
+                "persistent_notification",
+                "create",
+                {
+                    "title": "Open in Stash",
+                    "message": (
+                        f"[Open {type_label}]({stash_url})\n\n"
+                        "_Tip: install [browser\_mod](https://github.com/thomasloven/hass-browser_mod)"
+                        " for direct in-dashboard opening._"
+                    ),
+                    "notification_id": "stash_open",
+                },
+            )
 
     # ------------------------------------------------------------------
     # Thumbnail helpers
