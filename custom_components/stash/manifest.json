@@ -1,0 +1,12 @@
+{
+  "domain": "stash",
+  "name": "Stash",
+  "codeowners": ["@ondine"],
+  "config_flow": true,
+  "documentation": "https://github.com/ondine/ha-stash/",
+  "issue_tracker": "https://github.com/ondine/ha-stash/issues",
+  "integration_type": "service",
+  "iot_class": "local_polling",
+  "requirements": ["gql[requests]>=3.4.0"],
+  "version": "1.0.0"
+}
