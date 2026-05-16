@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -72,6 +74,8 @@ async def async_setup_entry(
             StashLastWatchedSceneSensor(stats, entry),
             # --- Performer sensors (slow coordinator) ---
             StashTopPerformerSensor(stats, entry),
+            # --- Time sensors (slow coordinator) ---
+            StashLastOTimeSensor(stats, entry),
         ]
     )
 
@@ -341,3 +345,32 @@ class StashTopPerformerSensor(CoordinatorEntity[StashStatsCoordinator], SensorEn
         if not performers:
             return None
         return {"top_performers": performers}
+
+
+class StashLastOTimeSensor(CoordinatorEntity[StashStatsCoordinator], SensorEntity):
+    """Sensor showing the timestamp of the most recent O event."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Last O"
+    _attr_icon = "mdi:clock-outline"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: StashStatsCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_last_o_at"
+        self._attr_device_info = _device_info(entry)
+
+    @property
+    def native_value(self) -> datetime | None:
+        """Return the timestamp of the most recent O event."""
+        if self.coordinator.data is None:
+            return None
+        raw = self.coordinator.data.get("last_o_at")
+        if not raw:
+            return None
+        try:
+            return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            return None
