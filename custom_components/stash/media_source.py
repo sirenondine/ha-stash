@@ -1,10 +1,12 @@
-"""Media source platform for Stash — galleries and images in the global browser."""
+"""Media source platform for Stash — scenes, galleries and images."""
 
 from __future__ import annotations
 
 import logging
 
 import aiohttp
+from aiohttp.web import HTTPNotFound, Request, Response
+from homeassistant.components.http import HomeAssistantView
 from homeassistant.components.media_player import MediaClass, MediaType
 from homeassistant.components.media_source import (
     BrowseMediaSource,
@@ -12,6 +14,7 @@ from homeassistant.components.media_source import (
     MediaSourceError,
     MediaSourceItem,
     PlayMedia,
+    Unresolvable,
 )
 from homeassistant.core import HomeAssistant
 
@@ -21,12 +24,69 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def async_get_media_source(hass: HomeAssistant) -> StashMediaSource:
-    """Return the Stash media source — called automatically by HA."""
+    """Return the Stash media source and register the proxy view."""
+    hass.http.register_view(StashMediaView(hass))
     return StashMediaSource(hass)
 
 
+# ---------------------------------------------------------------------------
+# HA HTTP view — proxies Stash images through HA so they work remotely
+# and without exposing the API key to the browser
+# ---------------------------------------------------------------------------
+
+
+class StashMediaView(HomeAssistantView):
+    """Proxy Stash thumbnails and images through HA's HTTP server."""
+
+    url = "/stash/{entry_id}/{resource_type}/{item_id}/{size}"
+    name = "stash_media"
+    requires_auth = True
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        """Initialise the view."""
+        self.hass = hass
+
+    async def get(
+        self,
+        request: Request,
+        entry_id: str,
+        resource_type: str,
+        item_id: str,
+        size: str,
+    ) -> Response:
+        """Proxy a GET request to Stash and return the response."""
+        entry = self.hass.config_entries.async_get_entry(entry_id)
+        if entry is None or entry.domain != DOMAIN:
+            raise HTTPNotFound
+
+        stash_base = entry.data[CONF_URL]
+        api_key = entry.data[CONF_API_KEY]
+        target = f"{stash_base}/{resource_type}/{item_id}/{size}?apikey={api_key}"
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    target, timeout=aiohttp.ClientTimeout(total=30)
+                ) as resp:
+                    if resp.status != 200:
+                        raise HTTPNotFound
+                    body = await resp.read()
+                    return Response(
+                        body=body,
+                        content_type=resp.content_type or "image/jpeg",
+                    )
+        except aiohttp.ClientError as err:
+            _LOGGER.debug("Error proxying Stash media: %s", err)
+            raise HTTPNotFound from err
+
+
+# ---------------------------------------------------------------------------
+# Media source
+# ---------------------------------------------------------------------------
+
+
 class StashMediaSource(MediaSource):
-    """Expose Stash galleries and images in HA's global media browser."""
+    """Expose Stash scenes, galleries and images in HA's global media browser."""
 
     name = "Stash"
 
@@ -39,15 +99,25 @@ class StashMediaSource(MediaSource):
     # Helpers
     # ------------------------------------------------------------------
 
-    def _config(self) -> tuple[str, str]:
-        """Return (url, api_key) from the first active config entry."""
+    def _entry_id(self) -> str:
+        """Return the entry_id of the first active config entry."""
+        for entry in self.hass.config_entries.async_entries(DOMAIN):
+            return entry.entry_id
+        raise MediaSourceError("No active Stash config entry found")
+
+    def _stash_config(self) -> tuple[str, str]:
+        """Return (url, api_key) for direct stream URLs."""
         for entry in self.hass.config_entries.async_entries(DOMAIN):
             return entry.data[CONF_URL], entry.data[CONF_API_KEY]
         raise MediaSourceError("No active Stash config entry found")
 
+    def _proxy(self, resource_type: str, item_id: str, size: str) -> str:
+        """Return a HA-proxied URL for a Stash media asset."""
+        return f"/stash/{self._entry_id()}/{resource_type}/{item_id}/{size}"
+
     async def _query(self, query: str) -> dict:
         """Execute a GraphQL query against Stash."""
-        url, api_key = self._config()
+        url, api_key = self._stash_config()
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
@@ -67,63 +137,37 @@ class StashMediaSource(MediaSource):
         except Exception as err:
             raise MediaSourceError(f"Error querying Stash: {err}") from err
 
-    def _gallery_thumb(self, gallery_id: str) -> str:
-        url, api_key = self._config()
-        return f"{url}/gallery/{gallery_id}/cover?apikey={api_key}"
-
-    def _image_thumb(self, image_id: str) -> str:
-        url, api_key = self._config()
-        return f"{url}/image/{image_id}/thumbnail?apikey={api_key}"
-
-    def _image_full(self, image_id: str) -> str:
-        url, api_key = self._config()
-        return f"{url}/image/{image_id}/image?apikey={api_key}"
-
-    def _scene_thumb(self, scene_id: str) -> str:
-        url, api_key = self._config()
-        return f"{url}/scene/{scene_id}/screenshot?apikey={api_key}"
-
-    def _scene_stream(self, scene_id: str) -> str:
-        url, api_key = self._config()
-        return f"{url}/scene/{scene_id}/stream?apikey={api_key}"
-
     # ------------------------------------------------------------------
     # Required MediaSource methods
     # ------------------------------------------------------------------
 
     async def async_resolve_media(self, item: MediaSourceItem) -> PlayMedia:
-        """Resolve an image or scene identifier to a playable URL."""
+        """Resolve a scene to a direct stream URL."""
         identifier = item.identifier or ""
         parts = identifier.split("/")
         section = parts[0]
         item_id = parts[1] if len(parts) > 1 else None
 
-        if not item_id:
-            raise MediaSourceError(f"Cannot resolve media: {identifier}")
+        if not item_id or section != "scenes":
+            raise Unresolvable(f"Cannot resolve media: {identifier}")
 
-        if section == "images":
-            media_url = self._image_full(item_id)
-            default_mime = "image/jpeg"
-        elif section == "scenes":
-            media_url = self._scene_stream(item_id)
-            default_mime = "video/mp4"
-        else:
-            raise MediaSourceError(f"Cannot resolve media: {identifier}")
+        # Scenes stream directly from Stash (don't proxy large video through HA)
+        url, api_key = self._stash_config()
+        stream_url = f"{url}/scene/{item_id}/stream?apikey={api_key}"
 
-        # Probe the actual content-type
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.head(
-                    media_url, timeout=aiohttp.ClientTimeout(total=5)
+                    stream_url, timeout=aiohttp.ClientTimeout(total=5)
                 ) as resp:
-                    mime = resp.content_type or default_mime
+                    mime = resp.content_type or "video/mp4"
         except Exception:
-            mime = default_mime
+            mime = "video/mp4"
 
-        return PlayMedia(media_url, mime)
+        return PlayMedia(stream_url, mime)
 
     async def async_browse_media(self, item: MediaSourceItem) -> BrowseMediaSource:
-        """Return the browseable media tree for the given item."""
+        """Return the browseable media tree."""
         identifier = item.identifier or ""
 
         if not identifier:
@@ -133,14 +177,14 @@ class StashMediaSource(MediaSource):
         section = parts[0]
         item_id = parts[1] if len(parts) > 1 else None
 
+        if section == "scenes":
+            return await self._browse_scenes()
         if section == "galleries":
             return (
                 await self._browse_gallery(item_id)
                 if item_id
                 else await self._browse_galleries()
             )
-        if section == "scenes":
-            return await self._browse_scenes()
 
         return self._build_root()
 
@@ -154,7 +198,7 @@ class StashMediaSource(MediaSource):
             domain=DOMAIN,
             identifier="",
             media_class=MediaClass.DIRECTORY,
-            media_content_type=MediaType.IMAGE,
+            media_content_type=MediaType.VIDEO,
             title="Stash",
             can_play=False,
             can_expand=True,
@@ -202,7 +246,7 @@ class StashMediaSource(MediaSource):
                 ),
                 can_play=True,
                 can_expand=False,
-                thumbnail=self._scene_thumb(s.get("id", "")),
+                thumbnail=self._proxy("scene", s.get("id", ""), "screenshot"),
             )
             for s in scenes
         ]
@@ -240,7 +284,7 @@ class StashMediaSource(MediaSource):
                 ),
                 can_play=False,
                 can_expand=True,
-                thumbnail=self._gallery_thumb(g.get("id", "")),
+                thumbnail=self._proxy("gallery", g.get("id", ""), "cover"),
             )
             for g in galleries
         ]
@@ -279,9 +323,11 @@ class StashMediaSource(MediaSource):
                 media_class=MediaClass.IMAGE,
                 media_content_type=MediaType.IMAGE,
                 title=img.get("title") or f"Image {img.get('id')}",
-                can_play=True,
+                # Images are not "playable" via video element — they browse only.
+                # Thumbnails load via the HA proxy view so they work locally & remotely.
+                can_play=False,
                 can_expand=False,
-                thumbnail=self._image_thumb(img.get("id", "")),
+                thumbnail=self._proxy("image", img.get("id", ""), "thumbnail"),
             )
             for img in images
         ]
@@ -293,6 +339,6 @@ class StashMediaSource(MediaSource):
             title=title,
             can_play=False,
             can_expand=True,
-            thumbnail=self._gallery_thumb(gallery_id),
+            thumbnail=self._proxy("gallery", gallery_id, "cover"),
             children=children,
         )
