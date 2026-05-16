@@ -1,8 +1,8 @@
 # Stash Home Assistant Integration
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
-[![GitHub Release](https://img.shields.io/github/v/release/ondine/ha-stash?style=for-the-badge)](https://github.com/ondine/ha-stash/releases)
-[![License](https://img.shields.io/github/license/ondine/ha-stash?style=for-the-badge)](LICENSE)
+[![GitHub Release](https://img.shields.io/github/v/release/ondine/ha-stash?style=for-the-badge&sort=semver)](https://github.com/ondine/ha-stash/releases/latest)
+[![License: Polyform NC](https://img.shields.io/badge/License-Polyform_NC_1.0-blue?style=for-the-badge)](LICENSE)
 
 Connects [Home Assistant](https://www.home-assistant.io/) to your [Stash](https://github.com/stashapp/stash) media library via its GraphQL API. Provides real-time library statistics, job monitoring, a full library browser, and dashboard controls.
 
@@ -11,9 +11,10 @@ Connects [Home Assistant](https://www.home-assistant.io/) to your [Stash](https:
 ## Features
 
 - **Library statistics** — scene, performer, studio, group, tag, gallery and image counts; total size and duration
-- **Activity tracking** — O count, play count, scenes played, total play duration
-- **Real-time job monitoring** — active job sensor and binary sensor via WebSocket subscription
-- **Library browser** — browse scenes, performers, studios and tags directly from the HA media browser UI
+- **Activity tracking** — O count, play count, scenes played, total play duration, last O timestamp
+- **Real-time job monitoring** — active job sensor and binary sensor updated instantly via WebSocket
+- **Library browser** — browse scenes, performers, studios, tags and galleries from the HA media browser
+- **Global media source** — Stash scenes and galleries appear in the HA global media browser, castable to any media player
 - **Dashboard buttons** — one-tap scan, generate, auto-tag, clean, identify, backup, optimise and stop-all-jobs
 - **HA services** — trigger any Stash task from automations
 - **Version tracking** — current version and update-available binary sensor
@@ -26,6 +27,10 @@ Connects [Home Assistant](https://www.home-assistant.io/) to your [Stash](https:
 
 ### HACS (Recommended)
 
+[![Add to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=ondine&repository=ha-stash&category=integration)
+
+Or manually:
+
 1. Open HACS in Home Assistant
 2. Go to **Integrations** → **⋮** → **Custom repositories**
 3. Add `https://github.com/ondine/ha-stash` as an **Integration**
@@ -34,8 +39,9 @@ Connects [Home Assistant](https://www.home-assistant.io/) to your [Stash](https:
 
 ### Manual
 
-1. Copy `custom_components/stash` into your HA `config/custom_components/` directory
-2. Restart Home Assistant
+1. Download the [latest release](https://github.com/ondine/ha-stash/releases/latest)
+2. Copy `custom_components/stash` into your HA `config/custom_components/` directory
+3. Restart Home Assistant
 
 ---
 
@@ -81,8 +87,9 @@ Changing either value reloads the integration automatically.
 | Total Play Duration | Total watched time (hours) | Slow |
 | Last O Scene | Title of the scene with the highest O count | Slow |
 | Last Watched Scene | Title of the most-played scene | Slow |
-| Top Performer | Name of the performer with the highest O count | Slow |
+| Top Performer | Name of the performer with the highest total scene O count | Slow |
 | Version | Current Stash server version | Slow |
+| Last O | Timestamp of the most recent O event (displays as "X hours ago") | Slow |
 | Active Job | Description of the currently running job, or "Idle" | Fast |
 
 ### Binary Sensors (Diagnostic)
@@ -119,9 +126,26 @@ Stash Library
 │   └── [Name]     That performer's scenes
 ├── Studios         Alphabetical, with logo thumbnails and scene counts
 │   └── [Name]     That studio's scenes
-└── Tags            Tags with at least one scene, alphabetical
-    └── [Name]      Scenes with that tag
+├── Tags            Tags with at least one scene, alphabetical
+│   └── [Name]      Scenes with that tag
+└── Galleries       100 most recent, with cover thumbnails
+    └── [Name]      Images within the gallery (displayed inline in the card)
 ```
+
+Clicking a performer or scene fires a `stash_open` HA event with the Stash URL, and opens a popup if [browser_mod](https://github.com/thomasloven/hass-browser_mod) is installed. Clicking a gallery image displays it directly in the media player card.
+
+### Global Media Source
+
+Stash appears as a source in HA's global media browser (**Media** in the sidebar). Content can be browsed and sent to any HA media player (Chromecast, VLC, smart TV, etc.):
+
+```
+Stash
+├── Scenes      48 most recent — streamable to any media player
+└── Galleries   100 most recent — images browseable with thumbnails
+    └── [Name]  Images within the gallery
+```
+
+All thumbnails are proxied through HA so they work behind a reverse proxy.
 
 ---
 
@@ -144,11 +168,9 @@ All services can be called from automations, scripts or **Developer Tools → Se
 
 ## Real-Time Updates via WebSocket
 
-The integration maintains a persistent WebSocket connection to Stash's GraphQL subscription endpoint (`/graphql` over `ws://`). When a job starts, updates or finishes, the status coordinator refreshes immediately rather than waiting for the next poll.
+The integration maintains a persistent WebSocket connection to Stash's GraphQL subscription endpoint. When a job starts, updates or finishes, the status coordinator refreshes immediately rather than waiting for the next poll.
 
-The **WebSocket Connected** binary sensor shows the connection state. If disconnected, the integration reconnects automatically using exponential back-off (5 s → 10 s → 30 s → 60 s → 120 s → 5 min).
-
-The WebSocket uses the `graphql-transport-ws` protocol. If your Stash version uses the older `graphql-ws` protocol, the WebSocket sensor will show disconnected but all polling will continue to work normally.
+The **WebSocket Connected** binary sensor shows the connection state. If disconnected, the integration reconnects automatically with exponential back-off (5 s → 10 s → 30 s → 60 s → 120 s → 5 min).
 
 ---
 
@@ -171,7 +193,7 @@ The WebSocket uses the `graphql-transport-ws` protocol. If your Stash version us
 
 ### WebSocket not connecting
 
-- The integration falls back to polling automatically — all sensors will still update
+- All sensors continue to work via polling as a fallback
 - Check the HA log for `Stash WebSocket disconnected` messages
 
 ### Last Watched Scene / Last O Scene shows wrong value or nothing
@@ -186,8 +208,10 @@ The WebSocket uses the `graphql-transport-ws` protocol. If your Stash version us
 - [Stash](https://github.com/stashapp/stash)
 - [Stash API documentation](https://docs.stashapp.cc)
 - [Issues](https://github.com/ondine/ha-stash/issues)
-- [Home Assistant](https://www.home-assistant.io/)
+- [Releases](https://github.com/ondine/ha-stash/releases/latest)
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+[Polyform Noncommercial License 1.0.0](LICENSE)
+
+Free for personal, educational, and non-commercial use. Commercial use is not permitted.
