@@ -116,7 +116,7 @@ class StashStatsCoordinator(_StashCoordinatorBase):
                     }
                 }
                 lastWatchedScene: findScenes(
-                    filter: { per_page: 1, sort: "last_played_at", direction: DESC }
+                    filter: { per_page: 1, sort: "play_count", direction: DESC }
                     scene_filter: { play_count: { value: 0, modifier: GREATER_THAN } }
                 ) {
                     scenes {
@@ -134,7 +134,7 @@ class StashStatsCoordinator(_StashCoordinatorBase):
                     version
                 }
                 topPerformers: findPerformers(
-                    filter: { per_page: 250, sort: "name", direction: ASC }
+                    filter: { per_page: 1000, sort: "name", direction: ASC }
                 ) {
                     performers {
                         id
