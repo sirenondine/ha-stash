@@ -38,28 +38,36 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     url = url.rstrip("/")
 
     # Test connection with a simple query
-    query = """
-        query {
-            stats {
-                sceneCount
-            }
-        }
-    """
+    # Stash API uses snake_case field names
+    query = """query { stats { scene_count } }"""
 
     try:
         async with aiohttp.ClientSession() as session:
+            _LOGGER.debug("Testing connection to %s/graphql", url)
+
             async with session.post(
                 f"{url}/graphql",
                 headers={"ApiKey": api_key, "Content-Type": "application/json"},
                 json={"query": query},
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as response:
+                _LOGGER.debug("Response status: %d", response.status)
+
                 if response.status == 401:
+                    _LOGGER.error("Authentication failed - check API key")
                     raise InvalidAuth
+
+                if response.status == 404:
+                    _LOGGER.error("GraphQL endpoint not found at %s/graphql", url)
+                    raise CannotConnect
+
                 if response.status != 200:
+                    error_text = await response.text()
+                    _LOGGER.error("HTTP %d: %s", response.status, error_text)
                     raise CannotConnect
 
                 result = await response.json()
+                _LOGGER.debug("Response: %s", result)
 
                 # Check for GraphQL errors
                 if "errors" in result:
@@ -70,6 +78,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
                     raise CannotConnect
 
     except aiohttp.ClientError as err:
+        _LOGGER.error("Connection error: %s", err)
         raise CannotConnect from err
 
     # Return info that you want to store in the config entry.

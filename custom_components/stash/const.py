@@ -15,12 +15,17 @@ SCAN_INTERVAL = 300  # 5 minutes
 SENSOR_SCENE_COUNT = "scene_count"
 SENSOR_PERFORMER_COUNT = "performer_count"
 SENSOR_STUDIO_COUNT = "studio_count"
-SENSOR_MOVIE_COUNT = "movie_count"
+SENSOR_GROUP_COUNT = "group_count"
 SENSOR_TAG_COUNT = "tag_count"
 SENSOR_GALLERY_COUNT = "gallery_count"
 SENSOR_IMAGE_COUNT = "image_count"
-SENSOR_TOTAL_SIZE = "total_size"
-SENSOR_TOTAL_DURATION = "total_duration"
+SENSOR_SCENES_SIZE = "scenes_size"
+SENSOR_IMAGES_SIZE = "images_size"
+SENSOR_SCENES_DURATION = "scenes_duration"
+SENSOR_TOTAL_O_COUNT = "total_o_count"
+SENSOR_TOTAL_PLAY_DURATION = "total_play_duration"
+SENSOR_TOTAL_PLAY_COUNT = "total_play_count"
+SENSOR_SCENES_PLAYED = "scenes_played"
 
 SENSOR_TYPES = {
     SENSOR_SCENE_COUNT: {
@@ -35,8 +40,8 @@ SENSOR_TYPES = {
         "name": "Studios",
         "icon": "mdi:office-building",
     },
-    SENSOR_MOVIE_COUNT: {
-        "name": "Movies",
+    SENSOR_GROUP_COUNT: {
+        "name": "Groups",
         "icon": "mdi:movie-open",
     },
     SENSOR_TAG_COUNT: {
@@ -51,12 +56,32 @@ SENSOR_TYPES = {
         "name": "Images",
         "icon": "mdi:image",
     },
-    SENSOR_TOTAL_SIZE: {
-        "name": "Total Size",
+    SENSOR_SCENES_SIZE: {
+        "name": "Scenes Size",
         "icon": "mdi:database",
     },
-    SENSOR_TOTAL_DURATION: {
-        "name": "Total Duration",
+    SENSOR_IMAGES_SIZE: {
+        "name": "Images Size",
+        "icon": "mdi:database",
+    },
+    SENSOR_SCENES_DURATION: {
+        "name": "Scenes Duration",
         "icon": "mdi:clock-outline",
+    },
+    SENSOR_TOTAL_O_COUNT: {
+        "name": "O Count",
+        "icon": "mdi:water",
+    },
+    SENSOR_TOTAL_PLAY_DURATION: {
+        "name": "Total Play Duration",
+        "icon": "mdi:play-circle-outline",
+    },
+    SENSOR_TOTAL_PLAY_COUNT: {
+        "name": "Total Play Count",
+        "icon": "mdi:play",
+    },
+    SENSOR_SCENES_PLAYED: {
+        "name": "Scenes Played",
+        "icon": "mdi:filmstrip-box-multiple",
     },
 }

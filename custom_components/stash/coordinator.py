@@ -37,21 +37,28 @@ class StashDataUpdateCoordinator(DataUpdateCoordinator[dict]):
         query = """
             query {
                 stats {
-                    sceneCount
-                    performerCount
-                    studioCount
-                    movieCount
-                    tagCount
-                    galleryCount
-                    imageCount
-                    totalSize
-                    totalDuration
+                    scene_count
+                    performer_count
+                    studio_count
+                    group_count
+                    tag_count
+                    gallery_count
+                    image_count
+                    scenes_size
+                    images_size
+                    scenes_duration
+                    total_o_count
+                    total_play_duration
+                    total_play_count
+                    scenes_played
                 }
             }
         """
 
         try:
             async with aiohttp.ClientSession() as session:
+                _LOGGER.debug("Fetching data from %s/graphql", self._url)
+
                 async with session.post(
                     f"{self._url}/graphql",
                     headers={
@@ -61,14 +68,23 @@ class StashDataUpdateCoordinator(DataUpdateCoordinator[dict]):
                     json={"query": query},
                     timeout=aiohttp.ClientTimeout(total=30),
                 ) as response:
+                    _LOGGER.debug("Response status: %d", response.status)
+
+                    if response.status == 401:
+                        raise UpdateFailed("Authentication failed - check API key")
+
                     if response.status != 200:
+                        error_text = await response.text()
+                        _LOGGER.error("HTTP %d: %s", response.status, error_text)
                         raise UpdateFailed(
-                            f"Error communicating with API: {response.status}"
+                            f"Error communicating with API: HTTP {response.status}"
                         )
 
                     result = await response.json()
+                    _LOGGER.debug("Response data: %s", result)
 
                     if "errors" in result:
+                        _LOGGER.error("GraphQL errors: %s", result["errors"])
                         raise UpdateFailed(f"GraphQL errors: {result['errors']}")
 
                     if "data" not in result or "stats" not in result["data"]:
@@ -79,4 +95,5 @@ class StashDataUpdateCoordinator(DataUpdateCoordinator[dict]):
         except UpdateFailed:
             raise
         except Exception as err:
+            _LOGGER.error("Error fetching data: %s", err)
             raise UpdateFailed(f"Error communicating with API: {err}") from err
