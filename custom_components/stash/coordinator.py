@@ -130,6 +130,7 @@ class StashStatsCoordinator(_StashCoordinatorBase):
                         id
                         name
                         scene_count
+                        o_counter
                         favorite
                         rating100
                     }
@@ -169,17 +170,18 @@ class StashStatsCoordinator(_StashCoordinatorBase):
             result["last_watched_scene_last_played_at"] = None
 
         # Merge top performers into the flat result dict
-        # Sort client-side by scene_count (API doesn't support this sort key)
+        # Sort client-side by o_counter descending (API doesn't support this sort key)
         all_performers = (data.get("topPerformers") or {}).get("performers", [])
         sorted_performers = sorted(
             all_performers,
-            key=lambda p: p.get("scene_count") or 0,
+            key=lambda p: p.get("o_counter") or 0,
             reverse=True,
         )[:5]
         result["top_performers"] = [
             {
                 "rank": i + 1,
                 "name": p.get("name"),
+                "o_count": p.get("o_counter"),
                 "scene_count": p.get("scene_count"),
                 "favorite": p.get("favorite"),
                 "rating": p.get("rating100"),
