@@ -64,8 +64,9 @@ async def async_setup_entry(
             StashDurationSensor(stats, entry, SENSOR_SCENES_DURATION),
             StashDurationSensor(stats, entry, SENSOR_TOTAL_PLAY_DURATION),
             # --- Status sensors (fast coordinator) ---
-            StashVersionSensor(status, entry),
             StashActiveJobSensor(status, entry),
+            # --- Version sensor (slow coordinator — avoids GitHub rate limits) ---
+            StashVersionSensor(stats, entry),
             # --- Scene sensors (slow coordinator) ---
             StashLastOSceneSensor(stats, entry),
             StashLastWatchedSceneSensor(stats, entry),
@@ -176,7 +177,7 @@ class StashDurationSensor(CoordinatorEntity[StashStatsCoordinator], SensorEntity
         return round(raw / 3600, 2)
 
 
-class StashVersionSensor(CoordinatorEntity[StashStatusCoordinator], SensorEntity):
+class StashVersionSensor(CoordinatorEntity[StashStatsCoordinator], SensorEntity):
     """Sensor showing the current Stash server version."""
 
     _attr_has_entity_name = True
@@ -184,7 +185,7 @@ class StashVersionSensor(CoordinatorEntity[StashStatusCoordinator], SensorEntity
     _attr_icon = "mdi:tag-text"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
-    def __init__(self, coordinator: StashStatusCoordinator, entry: ConfigEntry) -> None:
+    def __init__(self, coordinator: StashStatsCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_{SENSOR_VERSION}"
         self._attr_device_info = _device_info(entry)

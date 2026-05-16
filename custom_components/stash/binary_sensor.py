@@ -21,7 +21,7 @@ from .const import (
     BINARY_SENSOR_WEBSOCKET,
     DOMAIN,
 )
-from .coordinator import StashStatusCoordinator
+from .coordinator import StashStatsCoordinator, StashStatusCoordinator
 from .websocket import StashWebSocketClient
 
 
@@ -31,16 +31,16 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Stash binary sensors."""
-    coordinator: StashStatusCoordinator = entry.runtime_data.status_coordinator
-
+    status_coordinator: StashStatusCoordinator = entry.runtime_data.status_coordinator
+    stats_coordinator: StashStatsCoordinator = entry.runtime_data.stats_coordinator
     ws_client: StashWebSocketClient = entry.runtime_data.websocket
 
     async_add_entities(
         [
-            StashOnlineBinarySensor(coordinator, entry),
-            StashJobRunningBinarySensor(coordinator, entry),
-            StashUpdateAvailableBinarySensor(coordinator, entry),
-            StashDLNABinarySensor(coordinator, entry),
+            StashOnlineBinarySensor(status_coordinator, entry),
+            StashJobRunningBinarySensor(status_coordinator, entry),
+            StashUpdateAvailableBinarySensor(stats_coordinator, entry),
+            StashDLNABinarySensor(status_coordinator, entry),
             StashWebSocketBinarySensor(ws_client, entry),
         ]
     )
@@ -119,7 +119,7 @@ class StashJobRunningBinarySensor(
 
 
 class StashUpdateAvailableBinarySensor(
-    CoordinatorEntity[StashStatusCoordinator], BinarySensorEntity
+    CoordinatorEntity[StashStatsCoordinator], BinarySensorEntity
 ):
     """Binary sensor: is a newer version of Stash available?"""
 
@@ -129,7 +129,7 @@ class StashUpdateAvailableBinarySensor(
     _attr_device_class = BinarySensorDeviceClass.UPDATE
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
-    def __init__(self, coordinator: StashStatusCoordinator, entry: ConfigEntry) -> None:
+    def __init__(self, coordinator: StashStatsCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_{BINARY_SENSOR_UPDATE_AVAILABLE}"
         self._attr_device_info = _device_info(entry)

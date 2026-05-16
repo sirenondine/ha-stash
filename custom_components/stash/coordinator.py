@@ -36,6 +36,10 @@ class _StashCoordinatorBase(DataUpdateCoordinator[dict]):
         self._url = config_entry.data[CONF_URL]
         self._api_key = config_entry.data[CONF_API_KEY]
 
+    async def async_query(self, query: str) -> dict:
+        """Execute an ad-hoc GraphQL query and return the data block."""
+        return await self._post(query)
+
     async def _post(self, query: str) -> dict:
         """POST a GraphQL query and return the data block."""
         try:
@@ -123,6 +127,12 @@ class StashStatsCoordinator(_StashCoordinatorBase):
                         last_played_at
                     }
                 }
+                version {
+                    version
+                }
+                latestversion {
+                    version
+                }
                 topPerformers: findPerformers(
                     filter: { per_page: 250, sort: "name", direction: ASC }
                 ) {
@@ -139,6 +149,10 @@ class StashStatsCoordinator(_StashCoordinatorBase):
         """
         data = await self._post(query)
         result = dict(data.get("stats", {}))
+
+        # Version info (polled slowly — latestversion calls GitHub API)
+        result["version"] = (data.get("version") or {}).get("version")
+        result["latest_version"] = (data.get("latestversion") or {}).get("version")
 
         # Merge last O'd scene data into the flat result dict
         o_scenes = (data.get("lastOScene") or {}).get("scenes", [])
@@ -201,15 +215,9 @@ class StashStatusCoordinator(_StashCoordinatorBase):
         super().__init__(hass, config_entry, "Stash Status", interval)
 
     async def _async_update_data(self) -> dict:
-        """Fetch status data. Returns a structured dict."""
+        """Fetch job queue and DLNA status. Returns a structured dict."""
         query = """
             query {
-                version {
-                    version
-                }
-                latestversion {
-                    version
-                }
                 jobQueue {
                     id
                     status
@@ -223,8 +231,6 @@ class StashStatusCoordinator(_StashCoordinatorBase):
         """
         data = await self._post(query)
         return {
-            "version": (data.get("version") or {}).get("version"),
-            "latest_version": (data.get("latestversion") or {}).get("version"),
             "jobs": data.get("jobQueue") or [],
             "dlna_running": (data.get("dlnaStatus") or {}).get("running", False),
         }
