@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 import aiohttp
-from aiohttp.web import HTTPNotFound, Request, Response
+from aiohttp.web import HTTPNotFound, Request, Response, StreamResponse
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.components.media_player import MediaClass, MediaType
 from homeassistant.components.media_source import (
@@ -17,6 +17,7 @@ from homeassistant.components.media_source import (
     Unresolvable,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import CONF_API_KEY, CONF_URL, DOMAIN
 
@@ -53,8 +54,8 @@ class StashMediaView(HomeAssistantView):
         resource_type: str,
         item_id: str,
         size: str,
-    ) -> Response:
-        """Proxy a GET request to Stash and return the response."""
+    ) -> Response | StreamResponse:
+        """Proxy a GET request to Stash, streaming video chunk-by-chunk."""
         entry = self.hass.config_entries.async_get_entry(entry_id)
         if entry is None or entry.domain != DOMAIN:
             raise HTTPNotFound
@@ -63,21 +64,33 @@ class StashMediaView(HomeAssistantView):
         api_key = entry.data[CONF_API_KEY]
         target = f"{stash_base}/{resource_type}/{item_id}/{size}?apikey={api_key}"
 
+        session = async_get_clientsession(self.hass)
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    target, timeout=aiohttp.ClientTimeout(total=30)
-                ) as resp:
-                    if resp.status != 200:
-                        raise HTTPNotFound
-                    body = await resp.read()
-                    return Response(
-                        body=body,
-                        content_type=resp.content_type or "image/jpeg",
-                    )
+            resp = await session.get(target, timeout=aiohttp.ClientTimeout(total=None))
         except aiohttp.ClientError as err:
-            _LOGGER.debug("Error proxying Stash media: %s", err)
+            _LOGGER.debug("Error connecting to Stash: %s", err)
             raise HTTPNotFound from err
+
+        if resp.status != 200:
+            raise HTTPNotFound
+
+        content_type = resp.content_type or "application/octet-stream"
+
+        # Stream video chunk-by-chunk so HA never buffers the whole file
+        if content_type.startswith("video/"):
+            stream = StreamResponse()
+            stream.content_type = content_type
+            await stream.prepare(request)
+            async for chunk in resp.content.iter_chunked(65536):
+                await stream.write(chunk)
+            return stream
+
+        # Images and thumbnails — read fully and return
+        try:
+            body = await resp.read()
+        except aiohttp.ClientError as err:
+            raise HTTPNotFound from err
+        return Response(body=body, content_type=content_type)
 
 
 # ---------------------------------------------------------------------------
@@ -142,29 +155,30 @@ class StashMediaSource(MediaSource):
     # ------------------------------------------------------------------
 
     async def async_resolve_media(self, item: MediaSourceItem) -> PlayMedia:
-        """Resolve a scene to a direct stream URL."""
+        """Resolve a scene or image to a playable/displayable URL."""
         identifier = item.identifier or ""
         parts = identifier.split("/")
         section = parts[0]
         item_id = parts[1] if len(parts) > 1 else None
 
-        if not item_id or section != "scenes":
+        if not item_id:
             raise Unresolvable(f"Cannot resolve media: {identifier}")
 
-        # Scenes stream directly from Stash (don't proxy large video through HA)
-        url, api_key = self._stash_config()
-        stream_url = f"{url}/scene/{item_id}/stream?apikey={api_key}"
+        if section == "scenes":
+            # Stream via the HA proxy view so it works behind a reverse proxy.
+            # The view streams chunk-by-chunk so HA never buffers the full file.
+            return PlayMedia(
+                self._proxy("scene", item_id, "stream"),
+                "video/mp4",
+            )
 
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.head(
-                    stream_url, timeout=aiohttp.ClientTimeout(total=5)
-                ) as resp:
-                    mime = resp.content_type or "video/mp4"
-        except Exception:
-            mime = "video/mp4"
+        if section == "images":
+            # Images served via the HA proxy view.
+            # Returning image/* MIME type tells HA to display with <img>, not <video>.
+            proxy_url = self._proxy("image", item_id, "image")
+            return PlayMedia(proxy_url, "image/jpeg")
 
-        return PlayMedia(stream_url, mime)
+        raise Unresolvable(f"Cannot resolve media: {identifier}")
 
     async def async_browse_media(self, item: MediaSourceItem) -> BrowseMediaSource:
         """Return the browseable media tree."""
