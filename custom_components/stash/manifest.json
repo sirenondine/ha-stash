@@ -1,13 +1,13 @@
 {
   "domain": "stash",
   "name": "Stash",
-  "codeowners": ["@ondine"],
+  "codeowners": ["@sirenondine"],
   "config_flow": true,
   "dependencies": ["media_source"],
-  "documentation": "https://github.com/ondine/ha-stash/",
-  "issue_tracker": "https://github.com/ondine/ha-stash/issues",
+  "documentation": "https://github.com/sirenondine/ha-stash/",
+  "issue_tracker": "https://github.com/sirenondine/ha-stash/issues",
   "integration_type": "service",
   "iot_class": "local_polling",
   "requirements": ["gql[requests]>=3.4.0"],
-  "version": "1.9.0"
+  "version": "1.9.1"
 }

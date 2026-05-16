@@ -1,7 +1,7 @@
 # Stash Home Assistant Integration
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
-[![GitHub Release](https://img.shields.io/github/v/release/ondine/ha-stash?style=for-the-badge&sort=semver)](https://github.com/ondine/ha-stash/releases/latest)
+[![GitHub Release](https://img.shields.io/github/v/release/sirenondine/ha-stash?style=for-the-badge&sort=semver)](https://github.com/sirenondine/ha-stash/releases/latest)
 [![License: Polyform NC](https://img.shields.io/badge/License-Polyform_NC_1.0-blue?style=for-the-badge)](LICENSE)
 
 Connects [Home Assistant](https://www.home-assistant.io/) to your [Stash](https://github.com/stashapp/stash) media library via its GraphQL API. Provides real-time library statistics, job monitoring, a full library browser, and dashboard controls.
@@ -27,19 +27,19 @@ Connects [Home Assistant](https://www.home-assistant.io/) to your [Stash](https:
 
 ### HACS (Recommended)
 
-[![Add to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=ondine&repository=ha-stash&category=integration)
+[![Add to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=sirenondine&repository=ha-stash&category=integration)
 
 Or manually:
 
 1. Open HACS in Home Assistant
 2. Go to **Integrations** → **⋮** → **Custom repositories**
-3. Add `https://github.com/ondine/ha-stash` as an **Integration**
+3. Add `https://github.com/sirenondine/ha-stash` as an **Integration**
 4. Search for **Stash** and click **Download**
 5. Restart Home Assistant
 
 ### Manual
 
-1. Download the [latest release](https://github.com/ondine/ha-stash/releases/latest)
+1. Download the [latest release](https://github.com/sirenondine/ha-stash/releases/latest)
 2. Copy `custom_components/stash` into your HA `config/custom_components/` directory
 3. Restart Home Assistant
 
@@ -207,8 +207,8 @@ The **WebSocket Connected** binary sensor shows the connection state. If disconn
 
 - [Stash](https://github.com/stashapp/stash)
 - [Stash API documentation](https://docs.stashapp.cc)
-- [Issues](https://github.com/ondine/ha-stash/issues)
-- [Releases](https://github.com/ondine/ha-stash/releases/latest)
+- [Issues](https://github.com/sirenondine/ha-stash/issues)
+- [Releases](https://github.com/sirenondine/ha-stash/releases/latest)
 
 ## License
 
