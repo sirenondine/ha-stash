@@ -7,6 +7,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -59,6 +60,7 @@ class StashOnlineBinarySensor(
     _attr_name = "Online"
     _attr_icon = "mdi:server-network"
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator: StashStatusCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator)
@@ -79,6 +81,7 @@ class StashJobRunningBinarySensor(
     _attr_name = "Job Running"
     _attr_icon = "mdi:cog-sync"
     _attr_device_class = BinarySensorDeviceClass.RUNNING
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator: StashStatusCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator)
@@ -119,6 +122,7 @@ class StashUpdateAvailableBinarySensor(
     _attr_name = "Update Available"
     _attr_icon = "mdi:update"
     _attr_device_class = BinarySensorDeviceClass.UPDATE
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator: StashStatusCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator)
@@ -154,6 +158,7 @@ class StashDLNABinarySensor(
     _attr_name = "DLNA"
     _attr_icon = "mdi:cast"
     _attr_device_class = BinarySensorDeviceClass.RUNNING
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator: StashStatusCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator)

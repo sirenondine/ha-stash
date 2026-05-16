@@ -8,7 +8,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfInformation, UnitOfTime
+from homeassistant.const import EntityCategory, UnitOfInformation, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -177,6 +177,7 @@ class StashVersionSensor(CoordinatorEntity[StashStatusCoordinator], SensorEntity
     _attr_has_entity_name = True
     _attr_name = "Version"
     _attr_icon = "mdi:tag-text"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator: StashStatusCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator)
@@ -196,6 +197,7 @@ class StashActiveJobSensor(CoordinatorEntity[StashStatusCoordinator], SensorEnti
     _attr_has_entity_name = True
     _attr_name = "Active Job"
     _attr_icon = "mdi:cog-sync"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator: StashStatusCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator)
