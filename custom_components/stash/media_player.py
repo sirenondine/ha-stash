@@ -40,7 +40,9 @@ class StashMediaPlayer(CoordinatorEntity[StashStatsCoordinator], MediaPlayerEnti
     _attr_has_entity_name = True
     _attr_name = "Library"
     _attr_icon = "mdi:filmstrip-box-multiple"
-    _attr_supported_features = MediaPlayerEntityFeature.BROWSE_MEDIA
+    _attr_supported_features = (
+        MediaPlayerEntityFeature.BROWSE_MEDIA | MediaPlayerEntityFeature.PLAY_MEDIA
+    )
     _attr_media_content_type = MediaType.VIDEO
 
     def __init__(
@@ -70,6 +72,48 @@ class StashMediaPlayer(CoordinatorEntity[StashStatsCoordinator], MediaPlayerEnti
         return MediaPlayerState.IDLE
 
     # ------------------------------------------------------------------
+    # Play media — fires a HA event so automations can open Stash
+    # ------------------------------------------------------------------
+
+    async def async_play_media(
+        self,
+        media_type: str,
+        media_id: str,
+        **kwargs,
+    ) -> None:
+        """Fire a stash_open event containing the Stash web UI URL."""
+        parts = media_id.split("/")
+        section = parts[0]
+        item_id = parts[1] if len(parts) > 1 else None
+
+        # Map browser section → (Stash URL path, human type label)
+        section_map = {
+            "scenes": ("scenes", "scene"),
+            "performers": ("performers", "performer"),
+            "studios": ("studios", "studio"),
+            "tags": ("tags", "tag"),
+            "galleries": ("galleries", "gallery"),
+            "images": ("images", "image"),
+        }
+
+        if section not in section_map or not item_id:
+            _LOGGER.warning("Cannot open Stash URL for media_id: %s", media_id)
+            return
+
+        url_path, type_label = section_map[section]
+        stash_url = f"{self._url}/{url_path}/{item_id}"
+
+        self.hass.bus.async_fire(
+            "stash_open",
+            {
+                "url": stash_url,
+                "type": type_label,
+                "id": item_id,
+            },
+        )
+        _LOGGER.debug("Fired stash_open event: %s", stash_url)
+
+    # ------------------------------------------------------------------
     # Thumbnail helpers
     # ------------------------------------------------------------------
 
@@ -81,6 +125,12 @@ class StashMediaPlayer(CoordinatorEntity[StashStatsCoordinator], MediaPlayerEnti
 
     def _studio_thumb(self, studio_id: str) -> str:
         return f"{self._url}/studio/{studio_id}/image?apikey={self._api_key}"
+
+    def _gallery_thumb(self, gallery_id: str) -> str:
+        return f"{self._url}/gallery/{gallery_id}/cover?apikey={self._api_key}"
+
+    def _image_thumb(self, image_id: str) -> str:
+        return f"{self._url}/image/{image_id}/thumbnail?apikey={self._api_key}"
 
     # ------------------------------------------------------------------
     # Scene helper — converts a raw scene dict to a BrowseMedia leaf
@@ -95,7 +145,7 @@ class StashMediaPlayer(CoordinatorEntity[StashStatsCoordinator], MediaPlayerEnti
             media_class=MediaClass.VIDEO,
             media_content_type=MediaType.VIDEO,
             media_content_id=f"scenes/{scene_id}",
-            can_play=False,
+            can_play=True,
             can_expand=False,
             thumbnail=self._scene_thumb(scene_id),
         )
@@ -136,6 +186,12 @@ class StashMediaPlayer(CoordinatorEntity[StashStatsCoordinator], MediaPlayerEnti
                 await self._browse_tag_scenes(item_id)
                 if item_id
                 else await self._browse_tags()
+            )
+        if section == "galleries":
+            return (
+                await self._browse_gallery_images(item_id)
+                if item_id
+                else await self._browse_galleries()
             )
 
         return self._build_root()
@@ -186,6 +242,14 @@ class StashMediaPlayer(CoordinatorEntity[StashStatsCoordinator], MediaPlayerEnti
                     can_play=False,
                     can_expand=True,
                 ),
+                BrowseMedia(
+                    title="Galleries",
+                    media_class=MediaClass.DIRECTORY,
+                    media_content_type=MediaType.IMAGE,
+                    media_content_id="galleries",
+                    can_play=False,
+                    can_expand=True,
+                ),
             ],
         )
 
@@ -233,7 +297,7 @@ class StashMediaPlayer(CoordinatorEntity[StashStatsCoordinator], MediaPlayerEnti
                 media_class=MediaClass.ARTIST,
                 media_content_type=MediaType.VIDEO,
                 media_content_id=f"performers/{p.get('id')}",
-                can_play=False,
+                can_play=True,
                 can_expand=True,
                 thumbnail=self._performer_thumb(p.get("id", "")),
             )
@@ -298,7 +362,7 @@ class StashMediaPlayer(CoordinatorEntity[StashStatsCoordinator], MediaPlayerEnti
                 media_class=MediaClass.DIRECTORY,
                 media_content_type=MediaType.VIDEO,
                 media_content_id=f"studios/{s.get('id')}",
-                can_play=False,
+                can_play=True,
                 can_expand=True,
                 thumbnail=self._studio_thumb(s.get("id", "")),
             )
@@ -405,4 +469,85 @@ class StashMediaPlayer(CoordinatorEntity[StashStatsCoordinator], MediaPlayerEnti
             can_play=False,
             can_expand=True,
             children=[self._scene_item(s) for s in scenes],
+        )
+
+    # ------------------------------------------------------------------
+    # Galleries
+    # ------------------------------------------------------------------
+
+    async def _browse_galleries(self) -> BrowseMedia:
+        """Return all galleries sorted by date."""
+        data = await self.coordinator.async_query("""
+            query {
+                findGalleries(filter: { per_page: 100, sort: "date", direction: DESC }) {
+                    galleries { id title date image_count }
+                }
+            }
+        """)
+        galleries = (data.get("findGalleries") or {}).get("galleries", [])
+        children = [
+            BrowseMedia(
+                title=(
+                    f"{g.get('title') or 'Gallery'}"
+                    f" ({g.get('image_count', 0)} images)"
+                    + (f" — {g.get('date')}" if g.get("date") else "")
+                ),
+                media_class=MediaClass.ALBUM,
+                media_content_type=MediaType.IMAGE,
+                media_content_id=f"galleries/{g.get('id')}",
+                can_play=True,
+                can_expand=True,
+                thumbnail=self._gallery_thumb(g.get("id", "")),
+            )
+            for g in galleries
+        ]
+        return BrowseMedia(
+            title="Galleries",
+            media_class=MediaClass.DIRECTORY,
+            media_content_type=MediaType.IMAGE,
+            media_content_id="galleries",
+            can_play=False,
+            can_expand=True,
+            children=children,
+        )
+
+    async def _browse_gallery_images(self, gallery_id: str) -> BrowseMedia:
+        """Return images within a specific gallery."""
+        query = f"""
+            query {{
+                findImages(
+                    filter: {{ per_page: 100 }}
+                    image_filter: {{
+                        galleries: {{ modifier: INCLUDES, value: ["{gallery_id}"] }}
+                    }}
+                ) {{
+                    images {{ id title }}
+                }}
+                findGallery(id: "{gallery_id}") {{ title }}
+            }}
+        """
+        data = await self.coordinator.async_query(query)
+        images = (data.get("findImages") or {}).get("images", [])
+        title = (data.get("findGallery") or {}).get("title") or "Gallery"
+        children = [
+            BrowseMedia(
+                title=img.get("title") or f"Image {img.get('id')}",
+                media_class=MediaClass.IMAGE,
+                media_content_type=MediaType.IMAGE,
+                media_content_id=f"images/{img.get('id')}",
+                can_play=True,
+                can_expand=False,
+                thumbnail=self._image_thumb(img.get("id", "")),
+            )
+            for img in images
+        ]
+        return BrowseMedia(
+            title=title,
+            media_class=MediaClass.ALBUM,
+            media_content_type=MediaType.IMAGE,
+            media_content_id=f"galleries/{gallery_id}",
+            can_play=True,
+            can_expand=True,
+            thumbnail=self._gallery_thumb(gallery_id),
+            children=children,
         )

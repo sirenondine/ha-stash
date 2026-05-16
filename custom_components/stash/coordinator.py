@@ -133,16 +133,13 @@ class StashStatsCoordinator(_StashCoordinatorBase):
                 latestversion {
                     version
                 }
-                topPerformers: findPerformers(
-                    filter: { per_page: 1000, sort: "name", direction: ASC }
+                scenesWithO: findScenes(
+                    filter: { per_page: 5000, sort: "o_counter", direction: DESC }
+                    scene_filter: { o_counter: { value: 0, modifier: GREATER_THAN } }
                 ) {
-                    performers {
-                        id
-                        name
-                        scene_count
+                    scenes {
                         o_counter
-                        favorite
-                        rating100
+                        performers { id name }
                     }
                 }
             }
@@ -183,22 +180,33 @@ class StashStatsCoordinator(_StashCoordinatorBase):
             result["last_watched_scene_play_count"] = None
             result["last_watched_scene_last_played_at"] = None
 
-        # Merge top performers into the flat result dict
-        # Sort client-side by o_counter descending (API doesn't support this sort key)
-        all_performers = (data.get("topPerformers") or {}).get("performers", [])
+        # Aggregate scene o_counter by performer to find true top performers.
+        # performer.o_counter is a separate manual counter; summing scene o_counters
+        # across each performer's scenes gives the correct activity-based ranking.
+        performer_totals: dict[str, dict] = {}
+        for scene in (data.get("scenesWithO") or {}).get("scenes", []):
+            scene_o = scene.get("o_counter") or 0
+            for performer in scene.get("performers") or []:
+                pid = performer.get("id")
+                if not pid:
+                    continue
+                if pid not in performer_totals:
+                    performer_totals[pid] = {
+                        "name": performer.get("name", ""),
+                        "o_count": 0,
+                    }
+                performer_totals[pid]["o_count"] += scene_o
+
         sorted_performers = sorted(
-            all_performers,
-            key=lambda p: p.get("o_counter") or 0,
+            performer_totals.values(),
+            key=lambda p: p["o_count"],
             reverse=True,
         )[:5]
         result["top_performers"] = [
             {
                 "rank": i + 1,
-                "name": p.get("name"),
-                "o_count": p.get("o_counter"),
-                "scene_count": p.get("scene_count"),
-                "favorite": p.get("favorite"),
-                "rating": p.get("rating100"),
+                "name": p["name"],
+                "o_count": p["o_count"],
             }
             for i, p in enumerate(sorted_performers)
         ]
