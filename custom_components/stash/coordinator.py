@@ -100,7 +100,7 @@ class StashStatsCoordinator(_StashCoordinatorBase):
                     scenes_played
                 }
                 lastOScene: findScenes(
-                    filter: { per_page: 1, sort: "last_o_at", direction: DESC }
+                    filter: { per_page: 1, sort: "o_counter", direction: DESC }
                     scene_filter: { o_counter: { value: 1, modifier: GREATER_THAN } }
                 ) {
                     scenes {
@@ -108,7 +108,7 @@ class StashStatsCoordinator(_StashCoordinatorBase):
                         title
                         date
                         o_counter
-                        last_o_at
+                        o_history
                     }
                 }
                 lastWatchedScene: findScenes(
@@ -143,10 +143,11 @@ class StashStatsCoordinator(_StashCoordinatorBase):
         o_scenes = (data.get("lastOScene") or {}).get("scenes", [])
         if o_scenes:
             scene = o_scenes[0]
+            o_history = scene.get("o_history") or []
             result["last_o_scene_title"] = scene.get("title")
             result["last_o_scene_date"] = scene.get("date")
             result["last_o_scene_o_count"] = scene.get("o_counter")
-            result["last_o_scene_last_o_at"] = scene.get("last_o_at")
+            result["last_o_scene_last_o_at"] = o_history[-1] if o_history else None
         else:
             result["last_o_scene_title"] = None
             result["last_o_scene_date"] = None
