@@ -3,10 +3,11 @@
   "name": "Stash",
   "codeowners": ["@ondine"],
   "config_flow": true,
+  "dependencies": ["media_source"],
   "documentation": "https://github.com/ondine/ha-stash/",
   "issue_tracker": "https://github.com/ondine/ha-stash/issues",
   "integration_type": "service",
   "iot_class": "local_polling",
   "requirements": ["gql[requests]>=3.4.0"],
-  "version": "1.8.2"
+  "version": "1.8.4"
 }
