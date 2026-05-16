@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import quote
 
+import aiohttp
 from homeassistant.components.media_player import (
     BrowseMedia,
     MediaClass,
@@ -113,24 +115,70 @@ class StashMediaPlayer(CoordinatorEntity[StashStatsCoordinator], MediaPlayerEnti
         )
         _LOGGER.debug("Fired stash_open event: %s", stash_url)
 
+        # Show a clickable notification so the URL opens without needing an automation.
+        # Uses notification_id "stash_open" so each click replaces the previous one.
+        await self.hass.services.async_call(
+            "persistent_notification",
+            "create",
+            {
+                "title": "Open in Stash",
+                "message": f"[Open {type_label}]({stash_url})",
+                "notification_id": "stash_open",
+            },
+        )
+
     # ------------------------------------------------------------------
     # Thumbnail helpers
     # ------------------------------------------------------------------
 
-    def _scene_thumb(self, scene_id: str) -> str:
-        return f"{self._url}/scene/{scene_id}/screenshot?apikey={self._api_key}"
+    # ------------------------------------------------------------------
+    # Thumbnail proxy — routes through HA so remote access works
+    # ------------------------------------------------------------------
 
-    def _performer_thumb(self, performer_id: str) -> str:
-        return f"{self._url}/performer/{performer_id}/image?apikey={self._api_key}"
+    def _thumb(self, media_content_id: str) -> str:
+        """Return an HA-proxied thumbnail URL that works locally and remotely."""
+        encoded = quote(media_content_id, safe="")
+        return (
+            f"/api/media_player_proxy/{self.entity_id}"
+            f"/browse_media/{MediaType.VIDEO}/{encoded}"
+        )
 
-    def _studio_thumb(self, studio_id: str) -> str:
-        return f"{self._url}/studio/{studio_id}/image?apikey={self._api_key}"
+    async def async_get_browse_image(
+        self,
+        media_content_type: str,
+        media_content_id: str,
+        media_image_id: str | None = None,
+    ) -> tuple[bytes | None, str | None]:
+        """Fetch the thumbnail from Stash and return it through HA's proxy."""
+        parts = media_content_id.split("/")
+        section = parts[0]
+        item_id = parts[1] if len(parts) > 1 else None
 
-    def _gallery_thumb(self, gallery_id: str) -> str:
-        return f"{self._url}/gallery/{gallery_id}/cover?apikey={self._api_key}"
+        if not item_id:
+            return None, None
 
-    def _image_thumb(self, image_id: str) -> str:
-        return f"{self._url}/image/{image_id}/thumbnail?apikey={self._api_key}"
+        stash_thumb_map = {
+            "scenes": f"{self._url}/scene/{item_id}/screenshot",
+            "performers": f"{self._url}/performer/{item_id}/image",
+            "studios": f"{self._url}/studio/{item_id}/image",
+            "galleries": f"{self._url}/gallery/{item_id}/cover",
+            "images": f"{self._url}/image/{item_id}/thumbnail",
+        }
+        stash_url = stash_thumb_map.get(section)
+        if not stash_url:
+            return None, None
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{stash_url}?apikey={self._api_key}",
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as resp:
+                    if resp.status != 200:
+                        return None, None
+                    return await resp.read(), resp.content_type
+        except Exception:  # pylint: disable=broad-except
+            return None, None
 
     # ------------------------------------------------------------------
     # Scene helper — converts a raw scene dict to a BrowseMedia leaf
@@ -147,7 +195,7 @@ class StashMediaPlayer(CoordinatorEntity[StashStatsCoordinator], MediaPlayerEnti
             media_content_id=f"scenes/{scene_id}",
             can_play=True,
             can_expand=False,
-            thumbnail=self._scene_thumb(scene_id),
+            thumbnail=self._thumb(f"scenes/{scene_id}"),
         )
 
     # ------------------------------------------------------------------
@@ -299,7 +347,7 @@ class StashMediaPlayer(CoordinatorEntity[StashStatsCoordinator], MediaPlayerEnti
                 media_content_id=f"performers/{p.get('id')}",
                 can_play=True,
                 can_expand=True,
-                thumbnail=self._performer_thumb(p.get("id", "")),
+                thumbnail=self._thumb(f"performers/{p.get('id')}"),
             )
             for p in performers
         ]
@@ -338,7 +386,7 @@ class StashMediaPlayer(CoordinatorEntity[StashStatsCoordinator], MediaPlayerEnti
             media_content_id=f"performers/{performer_id}",
             can_play=False,
             can_expand=True,
-            thumbnail=self._performer_thumb(performer_id),
+            thumbnail=self._thumb(f"performers/{performer_id}"),
             children=[self._scene_item(s) for s in scenes],
         )
 
@@ -364,7 +412,7 @@ class StashMediaPlayer(CoordinatorEntity[StashStatsCoordinator], MediaPlayerEnti
                 media_content_id=f"studios/{s.get('id')}",
                 can_play=True,
                 can_expand=True,
-                thumbnail=self._studio_thumb(s.get("id", "")),
+                thumbnail=self._thumb(f"studios/{s.get('id')}"),
             )
             for s in studios
         ]
@@ -403,7 +451,7 @@ class StashMediaPlayer(CoordinatorEntity[StashStatsCoordinator], MediaPlayerEnti
             media_content_id=f"studios/{studio_id}",
             can_play=False,
             can_expand=True,
-            thumbnail=self._studio_thumb(studio_id),
+            thumbnail=self._thumb(f"studios/{studio_id}"),
             children=[self._scene_item(s) for s in scenes],
         )
 
@@ -497,7 +545,7 @@ class StashMediaPlayer(CoordinatorEntity[StashStatsCoordinator], MediaPlayerEnti
                 media_content_id=f"galleries/{g.get('id')}",
                 can_play=True,
                 can_expand=True,
-                thumbnail=self._gallery_thumb(g.get("id", "")),
+                thumbnail=self._thumb(f"galleries/{g.get('id')}"),
             )
             for g in galleries
         ]
@@ -537,7 +585,7 @@ class StashMediaPlayer(CoordinatorEntity[StashStatsCoordinator], MediaPlayerEnti
                 media_content_id=f"images/{img.get('id')}",
                 can_play=True,
                 can_expand=False,
-                thumbnail=self._image_thumb(img.get("id", "")),
+                thumbnail=self._thumb(f"images/{img.get('id')}"),
             )
             for img in images
         ]
@@ -548,6 +596,6 @@ class StashMediaPlayer(CoordinatorEntity[StashStatsCoordinator], MediaPlayerEnti
             media_content_id=f"galleries/{gallery_id}",
             can_play=True,
             can_expand=True,
-            thumbnail=self._gallery_thumb(gallery_id),
+            thumbnail=self._thumb(f"galleries/{gallery_id}"),
             children=children,
         )
