@@ -115,14 +115,7 @@ class StashStatsCoordinator(_StashCoordinatorBase):
                         o_history
                     }
                 }
-                recentOScene: findScenes(
-                    filter: { per_page: 1, sort: "updated_at", direction: DESC }
-                    scene_filter: { o_counter: { value: 0, modifier: GREATER_THAN } }
-                ) {
-                    scenes {
-                        o_history
-                    }
-                }
+
                 lastWatchedScene: findScenes(
                     filter: { per_page: 1, sort: "play_count", direction: DESC }
                     scene_filter: { play_count: { value: 0, modifier: GREATER_THAN } }
@@ -147,6 +140,7 @@ class StashStatsCoordinator(_StashCoordinatorBase):
                 ) {
                     scenes {
                         o_counter
+                        o_history
                         performers { id name }
                     }
                 }
@@ -167,20 +161,23 @@ class StashStatsCoordinator(_StashCoordinatorBase):
             result["last_o_scene_title"] = scene.get("title")
             result["last_o_scene_date"] = scene.get("date")
             result["last_o_scene_o_count"] = scene.get("o_counter")
-            result["last_o_scene_last_o_at"] = o_history[-1] if o_history else None
+            result["last_o_scene_last_o_at"] = o_history[0] if o_history else None
         else:
             result["last_o_scene_title"] = None
             result["last_o_scene_date"] = None
             result["last_o_scene_o_count"] = None
             result["last_o_scene_last_o_at"] = None
 
-        # Most recent O timestamp across all scenes (sorted by updated_at)
-        recent_o_scenes = (data.get("recentOScene") or {}).get("scenes", [])
-        if recent_o_scenes:
-            recent_history = recent_o_scenes[0].get("o_history") or []
-            result["last_o_at"] = recent_history[-1] if recent_history else None
-        else:
-            result["last_o_at"] = None
+        # True most-recent O timestamp: scan every o_history across all O'd scenes
+        # (scenesWithO is already fetched for top-performer calc, just reuse it)
+        global_last_o: str | None = None
+        for scene in (data.get("scenesWithO") or {}).get("scenes", []):
+            history = scene.get("o_history") or []
+            if history:
+                candidate = history[0]  # Stash stores history newest-first
+                if global_last_o is None or candidate > global_last_o:
+                    global_last_o = candidate
+        result["last_o_at"] = global_last_o
 
         # Merge last watched scene data into the flat result dict
         watched_scenes = (data.get("lastWatchedScene") or {}).get("scenes", [])
