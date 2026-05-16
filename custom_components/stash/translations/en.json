@@ -18,5 +18,21 @@
     "abort": {
       "already_configured": "Device is already configured"
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Stash Update Intervals",
+        "description": "Configure how frequently the integration polls your Stash server.",
+        "data": {
+          "slow_interval": "Stats update interval (seconds)",
+          "fast_interval": "Status update interval (seconds)"
+        },
+        "data_description": {
+          "slow_interval": "How often to refresh library statistics (scene counts, sizes, etc.). Minimum 60 seconds.",
+          "fast_interval": "How often to refresh job queue, DLNA status and version. Minimum 10 seconds."
+        }
+      }
+    }
   }
 }

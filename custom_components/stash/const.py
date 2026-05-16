@@ -4,14 +4,19 @@ DOMAIN = "stash"
 DEFAULT_NAME = "Stash"
 DEFAULT_PORT = 9999
 
-# Configuration
+# Configuration keys (stored in entry.data)
 CONF_URL = "url"
 CONF_API_KEY = "api_key"
 
-# Update interval
-SCAN_INTERVAL = 300  # 5 minutes
+# Options keys (stored in entry.options)
+CONF_FAST_INTERVAL = "fast_interval"
+CONF_SLOW_INTERVAL = "slow_interval"
 
-# Sensor types
+# Default update intervals (seconds)
+DEFAULT_FAST_INTERVAL = 30  # for job queue, DLNA, version
+DEFAULT_SLOW_INTERVAL = 300  # for library stats
+
+# Sensor types (library stats — polled slowly)
 SENSOR_SCENE_COUNT = "scene_count"
 SENSOR_PERFORMER_COUNT = "performer_count"
 SENSOR_STUDIO_COUNT = "studio_count"
@@ -26,6 +31,10 @@ SENSOR_TOTAL_O_COUNT = "total_o_count"
 SENSOR_TOTAL_PLAY_DURATION = "total_play_duration"
 SENSOR_TOTAL_PLAY_COUNT = "total_play_count"
 SENSOR_SCENES_PLAYED = "scenes_played"
+
+# Sensor types (status — polled fast)
+SENSOR_VERSION = "version"
+SENSOR_ACTIVE_JOB = "active_job"
 
 SENSOR_TYPES = {
     SENSOR_SCENE_COUNT: {
@@ -85,3 +94,9 @@ SENSOR_TYPES = {
         "icon": "mdi:filmstrip-box-multiple",
     },
 }
+
+# Binary sensor types
+BINARY_SENSOR_ONLINE = "online"
+BINARY_SENSOR_JOB_RUNNING = "job_running"
+BINARY_SENSOR_UPDATE_AVAILABLE = "update_available"
+BINARY_SENSOR_DLNA = "dlna"

@@ -1,0 +1,31 @@
+scan:
+  name: Scan Library
+  description: Trigger a Stash library scan to detect new or changed files.
+
+generate:
+  name: Generate Metadata
+  description: Generate thumbnails, previews, and other metadata for library content.
+
+autotag:
+  name: Auto Tag
+  description: Automatically tag scenes, images, and galleries using filename matching.
+
+clean:
+  name: Clean Library
+  description: Remove entries from the Stash database that no longer have associated files.
+
+identify:
+  name: Identify Scenes
+  description: Attempt to automatically identify and match scenes using configured scrapers.
+
+backup:
+  name: Backup Database
+  description: Create a backup of the Stash database on the server.
+
+optimise:
+  name: Optimise Database
+  description: Run an optimisation pass on the Stash database to improve performance.
+
+stop_all_jobs:
+  name: Stop All Jobs
+  description: Cancel all currently queued and running Stash jobs.

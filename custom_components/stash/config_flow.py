@@ -8,9 +8,17 @@ from typing import Any
 import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries, exceptions
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 
-from .const import CONF_API_KEY, CONF_URL, DOMAIN
+from .const import (
+    CONF_API_KEY,
+    CONF_FAST_INTERVAL,
+    CONF_SLOW_INTERVAL,
+    CONF_URL,
+    DEFAULT_FAST_INTERVAL,
+    DEFAULT_SLOW_INTERVAL,
+    DOMAIN,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -90,6 +98,14 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> "OptionsFlow":
+        """Return the options flow handler."""
+        return OptionsFlow()
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
@@ -112,6 +128,36 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user", data_schema=DATA_SCHEMA, errors=errors
         )
+
+
+class OptionsFlow(config_entries.OptionsFlow):
+    """Handle Stash integration options."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Show the options form."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        current_slow = self.config_entry.options.get(
+            CONF_SLOW_INTERVAL, DEFAULT_SLOW_INTERVAL
+        )
+        current_fast = self.config_entry.options.get(
+            CONF_FAST_INTERVAL, DEFAULT_FAST_INTERVAL
+        )
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_SLOW_INTERVAL, default=current_slow): vol.All(
+                    vol.Coerce(int), vol.Range(min=60, max=3600)
+                ),
+                vol.Required(CONF_FAST_INTERVAL, default=current_fast): vol.All(
+                    vol.Coerce(int), vol.Range(min=10, max=300)
+                ),
+            }
+        )
+        return self.async_show_form(step_id="init", data_schema=schema)
 
 
 class CannotConnect(exceptions.HomeAssistantError):
