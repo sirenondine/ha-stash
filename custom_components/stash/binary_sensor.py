@@ -18,9 +18,11 @@ from .const import (
     BINARY_SENSOR_JOB_RUNNING,
     BINARY_SENSOR_ONLINE,
     BINARY_SENSOR_UPDATE_AVAILABLE,
+    BINARY_SENSOR_WEBSOCKET,
     DOMAIN,
 )
 from .coordinator import StashStatusCoordinator
+from .websocket import StashWebSocketClient
 
 
 async def async_setup_entry(
@@ -31,12 +33,15 @@ async def async_setup_entry(
     """Set up Stash binary sensors."""
     coordinator: StashStatusCoordinator = entry.runtime_data.status_coordinator
 
+    ws_client: StashWebSocketClient = entry.runtime_data.websocket
+
     async_add_entities(
         [
             StashOnlineBinarySensor(coordinator, entry),
             StashJobRunningBinarySensor(coordinator, entry),
             StashUpdateAvailableBinarySensor(coordinator, entry),
             StashDLNABinarySensor(coordinator, entry),
+            StashWebSocketBinarySensor(ws_client, entry),
         ]
     )
 
@@ -170,3 +175,33 @@ class StashDLNABinarySensor(
         if self.coordinator.data is None:
             return None
         return self.coordinator.data.get("dlna_running", False)
+
+
+class StashWebSocketBinarySensor(BinarySensorEntity):
+    """Binary sensor showing whether the Stash WebSocket is connected."""
+
+    _attr_has_entity_name = True
+    _attr_name = "WebSocket Connected"
+    _attr_icon = "mdi:websocket"
+    _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_should_poll = False
+
+    def __init__(self, ws_client: StashWebSocketClient, entry: ConfigEntry) -> None:
+        """Initialise the sensor."""
+        self._ws_client = ws_client
+        self._attr_unique_id = f"{entry.entry_id}_{BINARY_SENSOR_WEBSOCKET}"
+        self._attr_device_info = _device_info(entry)
+
+    async def async_added_to_hass(self) -> None:
+        """Register callback so the entity updates when connection state changes."""
+        self._ws_client.register_callback(self.async_write_ha_state)
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Unregister callback on removal."""
+        self._ws_client.unregister_callback(self.async_write_ha_state)
+
+    @property
+    def is_on(self) -> bool:
+        """Return True when the WebSocket is connected."""
+        return self._ws_client.connected
